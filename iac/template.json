@@ -1,0 +1,112 @@
+{
+    "$schema": "http://schema.management.azure.com/schemas/2015-01-01/deploymentTemplate.json#",
+    "contentVersion": "1.0.0.0",
+    "parameters": {
+        "nameBase": {
+            "type": "string"
+        },
+        "cosmosDbDefaultExperience": {
+            "type": "string"
+        },
+        "location": {
+            "type": "string"
+        },
+        "locationName": {
+            "type": "string"
+        },
+        "storageAccountType": {
+            "type": "string",
+            "defaultValue": "Standard_LRS"
+        }
+    },
+    "variables": {
+        "cosmosDbName": "[concat(parameters('nameBase'), '-cdb')]",
+        "functionAppName": "[concat(parameters('nameBase'), '-fa')]",
+        "storageName": "[concat(parameters('nameBase'), uniqueString(resourceGroup().id))]"
+    },
+    "resources": [
+        {
+            "apiVersion": "2015-04-08",
+            "kind": "GlobalDocumentDB",
+            "type": "Microsoft.DocumentDB/databaseAccounts",
+            "name": "[variables('cosmosDbName')]",
+            "location": "[parameters('location')]",
+            "properties": {
+                "databaseAccountOfferType": "Standard",
+                "locations": [
+                    {
+                        "id": "[concat(variables('cosmosDbName'), '-', parameters('location'))]",
+                        "failoverPriority": 0,
+                        "locationName": "[parameters('locationName')]"
+                    }
+                ],
+                "enableMultipleWriteLocations": false,
+                "isVirtualNetworkFilterEnabled": false,
+                "virtualNetworkRules": [],
+                "ipRangeFilter": "",
+                "dependsOn": []
+            },
+            "tags": {
+                "defaultExperience": "[parameters('cosmosDbDefaultExperience')]"
+            }
+        },
+        {
+            "apiVersion": "2016-08-01",
+            "name": "[variables('functionAppName')]",
+            "type": "Microsoft.Web/sites",
+            "properties": {
+                "name": "[variables('functionAppName')]",
+                "siteConfig": {
+                    "appSettings": [
+                        {
+                            "name": "FUNCTIONS_WORKER_RUNTIME",
+                            "value": "dotnet"
+                        },
+                        {
+                            "name": "AzureWebJobsStorage",
+                            "value": "[concat('DefaultEndpointsProtocol=https;AccountName=',variables('storageName'),';AccountKey=',listKeys(resourceId('Microsoft.Storage/storageAccounts', variables('storageName')), '2015-05-01-preview').key1)]"
+                        },
+                        {
+                            "name": "FUNCTIONS_EXTENSION_VERSION",
+                            "value": "~2"
+                        },
+                        {
+                            "name": "WEBSITE_CONTENTAZUREFILECONNECTIONSTRING",
+                            "value": "[concat('DefaultEndpointsProtocol=https;AccountName=',variables('storageName'),';AccountKey=',listKeys(resourceId('Microsoft.Storage/storageAccounts', variables('storageName')), '2015-05-01-preview').key1)]"
+                        },
+                        {
+                            "name": "WEBSITE_CONTENTSHARE",
+                            "value": "[concat(toLower(variables('functionAppName')), '9c4f')]"
+                        },
+                        {
+                            "name": "WEBSITE_NODE_DEFAULT_VERSION",
+                            "value": "10.14.1"
+                        }
+                    ]
+                },
+                "clientAffinityEnabled": false,
+                "reserved": false
+            },
+            "dependsOn": [
+                "[resourceId('Microsoft.Storage/storageAccounts', variables('storageName'))]"
+            ],
+            "location": "[parameters('location')]",
+            "kind": "functionapp"
+        },
+        {
+            "apiVersion": "2015-06-15",
+            "type": "Microsoft.Storage/storageAccounts",
+            "name": "[variables('storageName')]",
+            "location": "[parameters('location')]",
+            "properties": {
+                "accountType": "[parameters('storageAccountType')]"
+            }
+        }
+    ],
+    "outputs": {
+        "comsosDbResourceId": {
+            "type": "string",
+            "value": "[resourceId('Microsoft.DocumentDB/databaseAccounts', variables('cosmosDbName'))]"
+        }
+    }
+}
